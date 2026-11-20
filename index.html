@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Amue KeyFlow — Windows keyboard mapper &amp; Voice FX</title>
+<meta name="description" content="Amue KeyFlow turns any key into a shortcut, macro or text — and runs real-time microphone presets. Free Windows installer.">
+<style>
+  :root{
+    --bg:#080b12;
+    --bg-soft:#0d1220;
+    --card:rgba(255,255,255,.035);
+    --card-brd:rgba(255,255,255,.09);
+    --text:#e9eef8;
+    --muted:#9aa7bd;
+    --accent:#5eead4;
+    --accent2:#8b8cf9;
+    --radius:18px;
+    --maxw:1140px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font:16px/1.6 "Segoe UI Variable Display","Segoe UI",Inter,system-ui,-apple-system,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden;
+  }
+  body::before{
+    content:"";position:fixed;inset:-30% -10% auto -10%;height:80vh;z-index:-1;
+    background:
+      radial-gradient(45% 55% at 22% 20%,rgba(94,234,212,.16),transparent 70%),
+      radial-gradient(45% 55% at 78% 8%,rgba(139,140,249,.18),transparent 70%);
+    pointer-events:none;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 26px}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;font-size:12.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);font-weight:600;
+  }
+  .eyebrow::before{content:"";width:22px;height:1px;background:var(--accent);opacity:.7}
+
+  /* header */
+  header{
+    position:sticky;top:0;z-index:20;backdrop-filter:blur(16px);
+    background:rgba(8,11,18,.72);border-bottom:1px solid rgba(255,255,255,.06);
+  }
+  .nav{display:flex;align-items:center;gap:14px;height:70px}
+  .brand{display:flex;align-items:center;gap:11px;font-weight:700;letter-spacing:.01em}
+  .brand img{width:34px;height:34px;border-radius:9px;display:block}
+  .brand small{display:block;font-size:10.5px;letter-spacing:.18em;color:var(--muted);font-weight:600}
+  .nav-links{margin-left:auto;display:flex;align-items:center;gap:28px;font-size:14.5px;color:var(--muted)}
+  .nav-links a:hover{color:var(--text)}
+  .nav-cta{
+    margin-left:8px;padding:9px 18px;border-radius:999px;font-size:14px;font-weight:650;
+    color:#04120f;background:linear-gradient(135deg,var(--accent),#7dd3fc);
+  }
+  @media (max-width:820px){.nav-links a:not(.nav-cta){display:none}}
+
+  /* hero */
+  .hero{padding:74px 0 40px;display:grid;grid-template-columns:1.06fr .94fr;gap:56px;align-items:center}
+  @media (max-width:940px){.hero{grid-template-columns:1fr;gap:38px;padding-top:52px}}
+  h1{
+    font-size:clamp(2.3rem,4.6vw,3.6rem);line-height:1.06;margin:18px 0 20px;
+    letter-spacing:-.03em;font-weight:800;
+  }
+  h1 em{
+    font-style:normal;background:linear-gradient(120deg,var(--accent),var(--accent2));
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .lede{color:var(--muted);font-size:17.5px;max-width:34em;margin:0 0 30px}
+  .actions{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+  .btn{
+    display:inline-flex;align-items:center;gap:10px;padding:15px 26px;border-radius:14px;
+    font-weight:650;font-size:15.5px;transition:transform .16s ease,box-shadow .16s ease;
+  }
+  .btn-primary{
+    color:#04120f;background:linear-gradient(135deg,var(--accent),#7dd3fc);
+    box-shadow:0 14px 34px -14px rgba(94,234,212,.75);
+  }
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:0 20px 42px -16px rgba(94,234,212,.85)}
+  .btn-ghost{border:1px solid var(--card-brd);background:rgba(255,255,255,.03);color:var(--text)}
+  .btn-ghost:hover{border-color:rgba(255,255,255,.24)}
+  .btn svg{width:18px;height:18px}
+  .meta{display:flex;flex-wrap:wrap;gap:18px;margin-top:22px;font-size:13px;color:var(--muted)}
+  .meta span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.85}
+
+  /* screenshot frame */
+  .shot{
+    position:relative;border-radius:var(--radius);overflow:hidden;
+    border:1px solid var(--card-brd);background:var(--bg-soft);
+    box-shadow:0 40px 90px -50px rgba(0,0,0,.95),0 0 0 1px rgba(255,255,255,.03) inset;
+  }
+  .shot-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:rgba(255,255,255,.03);border-bottom:1px solid rgba(255,255,255,.05)}
+  .shot-bar i{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.16)}
+  .shot-bar span{margin-left:auto;font-size:11.5px;color:var(--muted);letter-spacing:.06em}
+  .shot img{display:block;width:100%}
+
+  /* sections */
+  section{padding:72px 0}
+  .head{max-width:44em;margin-bottom:38px}
+  h2{font-size:clamp(1.7rem,2.6vw,2.35rem);letter-spacing:-.02em;margin:14px 0 12px;font-weight:750}
+  .head p{color:var(--muted);margin:0}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  @media (max-width:940px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media (max-width:620px){.grid{grid-template-columns:1fr}}
+  .card{
+    padding:24px;border-radius:var(--radius);border:1px solid var(--card-brd);
+    background:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,.015));
+  }
+  .card h3{margin:14px 0 8px;font-size:16.5px;font-weight:680;letter-spacing:-.01em}
+  .card p{margin:0;color:var(--muted);font-size:14.5px}
+  .ic{
+    width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+    background:rgba(94,234,212,.12);border:1px solid rgba(94,234,212,.26);color:var(--accent);
+  }
+  .ic svg{width:19px;height:19px}
+
+  /* screens */
+  .tabs{display:flex;flex-wrap:wrap;gap:9px;margin-bottom:18px}
+  .tab{
+    padding:8px 16px;border-radius:999px;font-size:13.5px;color:var(--muted);
+    border:1px solid var(--card-brd);background:rgba(255,255,255,.02);cursor:pointer;font-family:inherit;
+  }
+  .tab[aria-selected="true"]{color:#04120f;background:var(--accent);border-color:transparent;font-weight:650}
+
+  /* install */
+  .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;counter-reset:s}
+  @media (max-width:820px){.steps{grid-template-columns:1fr}}
+  .step{
+    counter-increment:s;padding:24px;border-radius:var(--radius);
+    border:1px solid var(--card-brd);background:var(--card);position:relative;
+  }
+  .step::before{
+    content:"0" counter(s);font-size:12px;letter-spacing:.16em;color:var(--accent);font-weight:700;
+  }
+  .step h3{margin:12px 0 8px;font-size:16px;font-weight:680}
+  .step p{margin:0;color:var(--muted);font-size:14.5px}
+  .note{
+    margin-top:20px;padding:16px 18px;border-radius:14px;font-size:14px;color:var(--muted);
+    border:1px solid rgba(139,140,249,.28);background:rgba(139,140,249,.09);
+  }
+  code{font-family:"Cascadia Mono",Consolas,monospace;font-size:.92em;color:#b8f3e8}
+
+  /* final cta */
+  .cta{
+    padding:52px 40px;border-radius:26px;text-align:center;
+    border:1px solid var(--card-brd);
+    background:
+      radial-gradient(70% 130% at 50% 0%,rgba(94,234,212,.16),transparent 70%),
+      linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.015));
+  }
+  .cta h2{margin-top:0}
+  .cta p{color:var(--muted);max-width:36em;margin:0 auto 26px}
+
+  footer{border-top:1px solid rgba(255,255,255,.06);padding:30px 0 46px;font-size:13.5px;color:var(--muted)}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+  footer a:hover{color:var(--text)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <img src="assets/app-icon.png" alt="Amue KeyFlow icon">
+      <span>AMUE KEYFLOW<small>KEYBOARD &amp; VOICE</small></span>
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#screens">Screens</a>
+      <a href="#install">Install</a>
+      <a class="nav-cta" href="https://github.com/amuejunankar/AmueKeyFlow/releases/download/v1.4.2/AmueKeyFlow-1.4.2-Setup.exe">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <span class="eyebrow">Windows 10 / 11 &middot; Free</span>
+        <h1>Any key becomes <em>anything you want</em>.</h1>
+        <p class="lede">
+          Amue KeyFlow maps physical keys to shortcuts, Windows actions, typed text or multi-step
+          macros — all built in the GUI, nothing hardcoded. It also runs real-time microphone
+          presets, so the same app fixes your keyboard and your voice.
+        </p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://github.com/amuejunankar/AmueKeyFlow/releases/download/v1.4.2/AmueKeyFlow-1.4.2-Setup.exe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 12 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Download 1.4.2 for Windows
+          </a>
+          <a class="btn btn-ghost" href="https://github.com/amuejunankar/AmueKeyFlow/releases">Release notes</a>
+        </div>
+        <div class="meta">
+          <span><i class="dot"></i>44 MB installer</span>
+          <span><i class="dot"></i>No admin rights needed</span>
+          <span><i class="dot"></i>No telemetry, fully offline</span>
+        </div>
+      </div>
+      <div class="shot">
+        <div class="shot-bar"><i></i><i></i><i></i><span>Amue KeyFlow &middot; Dashboard</span></div>
+        <img src="assets/dashboard.png" alt="Amue KeyFlow dashboard">
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="features">
+      <div class="head">
+        <span class="eyebrow">Built for real use</span>
+        <h2>Everything a keyboard mapper should have</h2>
+        <p>Profiles, per-app rules, safety stops and an engine that actually releases keys cleanly.</p>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="6" width="20" height="12" rx="2.5"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg></div>
+          <h3>Mapping editor</h3>
+          <p>Record a physical combination or pick keys manually, then map it to a key, a shortcut, a Windows action, typed text or a macro.</p>
+        </article>
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></div>
+          <h3>Voice FX</h3>
+          <p>Real-time microphone presets — Child, Woman, Man, Elderly — with monitoring, WAV recording and a virtual-cable guide.</p>
+        </article>
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5h16v14H4z"/><path d="M8 9h8M8 13h5"/></svg></div>
+          <h3>Profiles &amp; per-app rules</h3>
+          <p>Independent mapping sets with instant switching, duplicate, export/import — and auto-activation when an app comes forward.</p>
+        </article>
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m12 3 8 4v5c0 5-3.4 8-8 9-4.6-1-8-4-8-9V7l8-4Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+          <h3>Safety first</h3>
+          <p>Emergency disable hotkey <code>CTRL + ALT + SHIFT + F12</code>, pause, full engine stop, hook watchdog and automatic database backups.</p>
+        </article>
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h18M3 12h18M3 17h10"/></svg></div>
+          <h3>Key Tester</h3>
+          <p>A live 104-key diagram that lights up every held key with its virtual-key and scan code, plus media, OEM and vendor keys.</p>
+        </article>
+        <article class="card">
+          <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="4.2"/></svg></div>
+          <h3>Native Windows engine</h3>
+          <p><code>WH_KEYBOARD_LL</code> capture and <code>SendInput</code> playback with injected-event tagging, so macros never recurse.</p>
+        </article>
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="screens">
+      <div class="head">
+        <span class="eyebrow">Take a look</span>
+        <h2>Dark glass UI, light and system themes</h2>
+        <p>Four accent colours, a bundled Inter font and painted cards — not a stock Qt form.</p>
+      </div>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-src="assets/dashboard.png" data-label="Dashboard">Dashboard</button>
+        <button class="tab" role="tab" aria-selected="false" data-src="assets/mapping-editor.png" data-label="Mapping editor">Mapping editor</button>
+        <button class="tab" role="tab" aria-selected="false" data-src="assets/voice-fx.png" data-label="Voice FX">Voice FX</button>
+        <button class="tab" role="tab" aria-selected="false" data-src="assets/key-tester.png" data-label="Key Tester">Key Tester</button>
+        <button class="tab" role="tab" aria-selected="false" data-src="assets/settings.png" data-label="Settings">Settings</button>
+      </div>
+      <div class="shot">
+        <div class="shot-bar"><i></i><i></i><i></i><span id="shot-label">Amue KeyFlow &middot; Dashboard</span></div>
+        <img id="shot-img" src="assets/dashboard.png" alt="Amue KeyFlow dashboard">
+      </div>
+    </section>
+  </div>
+
+  <div class="wrap">
+    <section id="install">
+      <div class="head">
+        <span class="eyebrow">Three steps</span>
+        <h2>Install in under a minute</h2>
+        <p>Upgrades an existing install in place and keeps your mappings, profiles and recordings.</p>
+      </div>
+      <div class="steps">
+        <div class="step">
+          <h3>Download the setup</h3>
+          <p><code>AmueKeyFlow-1.4.2-Setup.exe</code> — 44 MB, from the official GitHub release.</p>
+        </div>
+        <div class="step">
+          <h3>Run it</h3>
+          <p>No administrator rights required. Windows SmartScreen may ask you to confirm an unrecognised publisher: choose <strong>More info &rarr; Run anyway</strong>.</p>
+        </div>
+        <div class="step">
+          <h3>Start mapping</h3>
+          <p>Your data in <code>%APPDATA%\AmueKeyFlow</code> stays exactly where it is.</p>
+        </div>
+      </div>
+      <p class="note">
+        Requires Windows 10 or Windows 11 (64-bit). Installer MD5:
+        <code>7b836f769257853a97c71fc7dfc68d3f</code>
+      </p>
+    </section>
+  </div>
+
+  <div class="wrap" style="padding-bottom:80px">
+    <div class="cta">
+      <h2>Stop retyping. Start mapping.</h2>
+      <p>Free, offline, and yours to configure — no account, no subscription, no telemetry.</p>
+      <div class="actions" style="justify-content:center">
+        <a class="btn btn-primary" href="https://github.com/amuejunankar/AmueKeyFlow/releases/download/v1.4.2/AmueKeyFlow-1.4.2-Setup.exe">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 12 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Download Amue KeyFlow 1.4.2
+        </a>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>&copy; 2026 Amue KeyFlow &middot; Windows 10 / 11 64-bit</span>
+    <span>
+      <a href="https://github.com/amuejunankar/AmueKeyFlow">Downloads on GitHub</a>
+      &nbsp;&middot;&nbsp;
+      <a href="https://github.com/amuejunankar/AmueKeyFlow/releases">All releases</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const img = document.getElementById('shot-img');
+  const label = document.getElementById('shot-label');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(o => o.setAttribute('aria-selected', String(o === t)));
+    img.src = t.dataset.src;
+    img.alt = 'Amue KeyFlow ' + t.dataset.label;
+    label.textContent = 'Amue KeyFlow \u00b7 ' + t.dataset.label;
+  }));
+</script>
+</body>
+</html>
