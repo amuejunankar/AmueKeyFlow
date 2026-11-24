@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+build/__pycache__/
+dist/
+build/amue_keyflow/
+build/exe-test/
+build/innosetup.exe
+build/isdl.html
+build/innosetup-winget.log
+*.egg-info/
+tools/screens/
+installer/output/
+*.log
