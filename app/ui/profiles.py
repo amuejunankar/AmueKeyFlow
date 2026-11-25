@@ -69,6 +69,74 @@ class ProfileDialog(FramelessSheet):
         return None
 
 
+class AppOverrideDialog(FramelessSheet):
+    """Pick the application that gets its own extra mappings."""
+
+    def __init__(self, controller, parent: QWidget | None = None):
+        super().__init__(
+            parent,
+            "New app override",
+            "Extra mappings that apply only while this app is in front.",
+            width=520,
+        )
+        self.controller = controller
+        self.result: tuple[str, str] | None = None
+        self._last_app = (
+            getattr(controller.foreground, "last_external", "") if hasattr(controller, "foreground") else ""
+        )
+
+        self.app_combo = QComboBox()
+        self.app_combo.setEditable(True)
+        self.app_combo.setInsertPolicy(QComboBox.NoInsert)
+        apps: list[str] = []
+        if hasattr(controller, "foreground"):
+            apps = controller.foreground.running_apps()
+        if self._last_app and self._last_app not in apps:
+            apps.insert(0, self._last_app)
+        apps = sorted(set(apps))
+        self.app_combo.addItems(apps)
+        if self._last_app in apps:
+            self.app_combo.setCurrentIndex(apps.index(self._last_app))
+        self.body.addWidget(self.app_combo)
+
+        if self._last_app:
+            hint_text = f"Your last active app is {self._last_app} — it is preselected."
+        else:
+            hint_text = "Pick a running app or type its .exe name."
+        hint = QLabel(hint_text)
+        hint.setObjectName("Hint")
+        hint.setWordWrap(True)
+        self.body.addWidget(hint)
+
+        name_label = QLabel("NAME (OPTIONAL)")
+        name_label.setObjectName("FieldLabel")
+        self.body.addWidget(name_label)
+        self.name_input = QLineEdit()
+        self.name_input.setPlaceholderText("e.g. Figma shortcuts")
+        self.body.addWidget(self.name_input)
+
+        self.error = QLabel("")
+        self.error.setStyleSheet(f"color: {palette()['danger']}; font-size: 11.5px;")
+        self.error.setVisible(False)
+        self.body.addWidget(self.error)
+
+        self.footer.addStretch(1)
+        cancel = self.add_footer_button("Cancel")
+        cancel.clicked.connect(self.reject)
+        create = self.add_footer_button("Create override", "primary")
+        create.clicked.connect(self._create)
+        create.setDefault(True)
+
+    def _create(self) -> None:
+        text = self.app_combo.currentText().strip()
+        if not text:
+            self.error.setText("Choose or type an application name first.")
+            self.error.setVisible(True)
+            return
+        self.result = (text, self.name_input.text().strip())
+        self.accept()
+
+
 class AppRulesDialog(FramelessSheet):
     """Manage the applications that auto-activate a profile."""
 
@@ -111,6 +179,14 @@ class AppRulesDialog(FramelessSheet):
         hint_label.setObjectName("Hint")
         hint_label.setWordWrap(True)
         self.body.addWidget(hint_label)
+
+        override_note = QLabel(
+            "App overrides on the Key Mapper page are different: they keep this profile "
+            "and only change the keys they list, and they win for those keys."
+        )
+        override_note.setObjectName("Hint")
+        override_note.setWordWrap(True)
+        self.body.addWidget(override_note)
 
         self.error = QLabel("")
         self.error.setStyleSheet(f"color: {palette()['danger']}; font-size: 11.5px;")

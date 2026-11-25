@@ -6,6 +6,7 @@ import sqlite3
 
 import pytest
 
+from app.constants import CONFIG_SCHEMA_VERSION
 from app.database import migrations
 from app.database.database import Database
 from app.database.models import Mapping, new_id, normalize_executable
@@ -151,7 +152,7 @@ def test_migration_from_v1_keeps_existing_data(tmp_path):
     db = Database(path=path, backup_dir=tmp_path / "backups")
     db.connect()
     try:
-        assert db.conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.conn.execute("PRAGMA user_version").fetchone()[0] == CONFIG_SCHEMA_VERSION
         assert db.list_profiles()[0].name == "Work"
         stored = db.list_mappings("p1")
         assert len(stored) == 1 and stored[0].name == "Copy"

@@ -78,6 +78,23 @@ def main() -> int:
                 updated_at=utc_now(),
             )
         )
+    override = controller.db.create_app_override("smoketest.exe", "Smoke override")
+    controller.db.save_mapping(
+        Mapping(
+            id=new_id(),
+            override_id=override.id,
+            name="Override copy",
+            input_config={"mods": ["ctrl"], "key": "b"},
+            output_config={"mods": ["ctrl", "shift"], "key": "b"},
+            mapping_type="shortcut",
+            trigger_behavior="press",
+            is_enabled=True,
+            created_at=utc_now(),
+            updated_at=utc_now(),
+        )
+    )
+    # Pretend the override's app is in front so the live indicator is rendered too.
+    controller._active_override = override
     controller.refresh_state(full=True)
     app.processEvents()
 
@@ -91,6 +108,12 @@ def main() -> int:
         render(window, f"dark-{key}")
 
     window.navigate("mapper")
+    window.pages["mapper"].select_override(override.id)
+    app.processEvents()
+    render(window, "dark-mapper-override")
+    window.pages["mapper"].select_override(None)
+    app.processEvents()
+
     editor = MappingEditor(controller, None, window)
     editor.resize(editor.width(), editor.height())
     editor.show()
@@ -107,6 +130,12 @@ def main() -> int:
     app.processEvents()
     render(editor, "editor-macro")
     editor.reject()
+
+    override_editor = MappingEditor(controller, None, window, override_id=override.id)
+    override_editor.show()
+    app.processEvents()
+    render(override_editor, "editor-override")
+    override_editor.reject()
 
     controller.engine.stop()
     controller.settings.set("theme", "light")

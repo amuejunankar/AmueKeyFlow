@@ -200,7 +200,8 @@ class SearchDialog(FramelessSheet):
     def _refresh(self, text: str) -> None:
         self.results.clear()
         query = text.strip().lower()
-        for mapping in self.controller.profiles.active_mappings():
+        overrides = {o.id: o.executable for o in self.controller.db.list_app_overrides()}
+        for mapping in self.controller.all_mappings():
             haystack = " ".join(
                 [
                     mapping.name,
@@ -218,6 +219,12 @@ class SearchDialog(FramelessSheet):
             layout = QHBoxLayout(widget)
             layout.setContentsMargins(8, 5, 8, 5)
             layout.setSpacing(10)
+            scope = overrides.get(mapping.override_id or "")
+            if scope:
+                scope_label = QLabel(scope)
+                scope_label.setProperty("muted", True)
+                scope_label.setToolTip("App override — only applies while this app is in front")
+                layout.addWidget(scope_label)
             name = QLabel(mapping.name or mapping.input_display)
             name.setMinimumWidth(120)
             layout.addWidget(name)

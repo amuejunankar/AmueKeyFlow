@@ -41,6 +41,9 @@ import/export are all built in.
   sends exactly `PAGE UP`, and clean key-state release.
 - **Profiles** — independent mapping sets, instant switching, duplicate/export/import,
   and per-app rules that auto-activate a profile when its app comes to the foreground.
+- **Per-app overrides** — keep your profile everywhere and give one app a handful of its
+  own keys. Inside that app the override wins for the chords it defines; everything else,
+  and every other app, behaves normally.
 - **Safety first** — emergency disable hotkey (`CTRL + ALT + SHIFT + F12`), pause, full
   engine stop, hook watchdog with automatic recovery, key-state cleanup, and automatic
   database backups.
@@ -74,7 +77,7 @@ import/export are all built in.
 ### From the executable
 
 Run `dist\AmueKeyFlow\AmueKeyFlow.exe` (after building, see below), or build the
-installer and run `installer\output\AmueKeyFlow-1.5.0-Setup.exe`.
+installer and run `installer\output\AmueKeyFlow-1.6.0-Setup.exe`.
 
 ### From source
 
@@ -233,6 +236,33 @@ Details:
 - Rules are included in profile/all exports and restored on import when the executable is
   not already claimed.
 
+### Per-app overrides
+
+A profile switch gives an app a whole different mapping set. An **app override** is
+lighter: it keeps the active profile and layers a few extra mappings on top while one app
+is in front.
+
+1. **Key Mapper → scope list** (top left) → **Add app override…**, then pick the app that
+   is already running or type its `.exe` name.
+2. The page now shows that app's mappings; add them exactly like a profile mapping.
+3. Switch back to `Profile · <name>` at any time. Every override is in the same list.
+
+How it behaves:
+
+- Where an override maps a key the profile also maps, the override wins **in that app**
+  (for example `CTRL+S → CTRL+SHIFT+S` in Figma only). Keys the override does not mention
+  keep working normally.
+- Outside the app the override does nothing; the profile always applies.
+- Overrides layer on whichever profile is active, so they keep working when an app rule
+  switches profiles.
+- Duplicate keys inside one override are flagged like profile duplicates; an override
+  repeating a profile key is intended and never flagged.
+- **Apply this app's mappings** turns the whole override off without deleting it; the
+  trash button removes it together with its mappings.
+- The live override is shown in the sidebar while it is active.
+- Overrides travel with **Export all** (version 2 files) and imports; version 1 files still
+  import and simply have none.
+
 ---
 
 ## Startup and tray
@@ -339,10 +369,36 @@ Exports are versioned JSON:
 }
 ```
 
+Version 2 files add an optional top-level `app_overrides` list, whose mapping objects are
+identical to the ones above:
+
+```json
+"app_overrides": [
+  {
+    "name": "Figma",
+    "executable": "figma.exe",
+    "enabled": true,
+    "mappings": [
+      {
+        "name": "Save copy",
+        "input": {"mods": ["ctrl"], "key": "s"},
+        "output": {"mods": ["ctrl", "shift"], "key": "s"},
+        "type": "shortcut",
+        "trigger": "press",
+        "delay": 0,
+        "enabled": true
+      }
+    ]
+  }
+]
+```
+
+Version 1 files still import; they simply contain no overrides.
+
 Validation rejects: non-JSON files, files over 2 MB, unknown schema or newer versions,
-unknown keys/types/actions/trigger values, oversized profiles, duplicate profile names
-or duplicate inputs inside a profile, and invalid delays. Imported data is treated purely
-as data — nothing is evaluated. Merge is the default; replace requires an additional
+unknown keys/types/actions/trigger values, oversized profiles, duplicate profile names,
+duplicate inputs inside a profile, duplicate or invalid app overrides, and invalid delays.
+Imported data is treated purely as data — nothing is evaluated. Merge is the default; replace requires an additional
 confirmation and creates a backup first.
 
 Configuration migration is versioned with `PRAGMA user_version`; newer builds can add
@@ -400,7 +456,7 @@ amue-keyflow/
 │   ├── database/               database.py models.py migrations.py
 │   ├── services/               profiles, settings, startup, tray, activity, import/export
 │   └── resources/              Inter fonts, generated icon, icon licence
-├── tests/                      76 automated tests
+├── tests/                      87 automated tests
 ├── tools/                      make_icon.py, smoke_ui.py, engine_check.py
 ├── build/                      PyInstaller spec, version info, build.ps1
 └── installer/                  Inno Setup script + instructions
@@ -430,7 +486,7 @@ powershell -ExecutionPolicy Bypass -File build\build.ps1
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\amue_keyflow.iss
 ```
 
-Result: `installer\output\AmueKeyFlow-1.5.0-Setup.exe` (~46 MB; the audio engine adds
+Result: `installer\output\AmueKeyFlow-1.6.0-Setup.exe` (~46 MB; the audio engine adds
 about 12 MB). The script is compatible
 with Inno Setup 6.0.5 and newer and was compiled and install-tested here. The installer
 offers Start Menu and optional desktop shortcuts, an optional per-user startup entry,
@@ -446,21 +502,23 @@ Build outputs are not committed. After the two commands above you have:
 
 ```
 dist\AmueKeyFlow\AmueKeyFlow.exe                     portable build
-installer\output\AmueKeyFlow-1.5.0-Setup.exe        installer
+installer\output\AmueKeyFlow-1.6.0-Setup.exe        installer
 ```
 
 ---
 
 ## Tests and verification status
 
-Automated (`python -m pytest -q`): **76 passed** — mapping resolution/suppression,
+Automated (`python -m pytest -q`): **87 passed** — mapping resolution/suppression,
 repeat policies, release/toggle/hold triggers, specific modifiers, emergency hotkey,
 conflict detection, profile lifecycle and persistence, settings persistence, migration
 version, import validation (malformed/oversized/duplicate/invalid outputs), export/import
 round-trips, activity logging, chord formatting, voice preset parameters and clamping,
 virtual-cable detection, streaming processor level/continuity, WAV header patching while
-recording, and the guarantee that audio devices are never re-enumerated under a live stream
-(which used to abort it and silence recordings).
+recording, per-app override layering and scoping (an override beats the profile chord in its
+app and nowhere else), the version 2 → 3 database migration, override import/export, and the
+guarantee that audio devices are never re-enumerated under a live stream (which used to abort
+it and silence recordings).
 
 UI smoke test (`python tools/smoke_ui.py`): builds the controller, every page, the editor,
 dark/light themes and exports for all screens; rendered screenshots were inspected and

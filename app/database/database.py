@@ -15,6 +15,7 @@ from app.constants import BACKUP_DIR, CONFIG_SCHEMA_VERSION, DB_PATH, DEFAULT_SE
 from app.database import migrations
 from app.database.models import (
     ActivityEntry,
+    AppOverride,
     AppRule,
     Mapping,
     Profile,
@@ -285,6 +286,75 @@ class Database:
             ).fetchone()
         return Profile.from_row(row) if row else None
 
+    # -- app overrides -----------------------------------------------------
+    def list_app_overrides(self) -> list[AppOverride]:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT o.*, (SELECT COUNT(*) FROM mappings m WHERE m.override_id = o.id) AS mapping_count"
+                " FROM app_overrides o ORDER BY o.executable COLLATE NOCASE"
+            ).fetchall()
+        return [AppOverride.from_row(r) for r in rows]
+
+    def get_app_override(self, override_id: str) -> AppOverride | None:
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT o.*, (SELECT COUNT(*) FROM mappings m WHERE m.override_id = o.id) AS mapping_count"
+                " FROM app_overrides o WHERE o.id = ?",
+                (override_id,),
+            ).fetchone()
+        return AppOverride.from_row(row) if row else None
+
+    def app_override_for_executable(self, executable: str) -> AppOverride | None:
+        try:
+            name = normalize_executable(executable)
+        except ValueError:
+            return None
+        with self._lock:
+            row = self.conn.execute(
+                "SELECT o.*, (SELECT COUNT(*) FROM mappings m WHERE m.override_id = o.id) AS mapping_count"
+                " FROM app_overrides o WHERE o.executable = ? COLLATE NOCASE LIMIT 1",
+                (name,),
+            ).fetchone()
+        return AppOverride.from_row(row) if row else None
+
+    def create_app_override(self, executable: str, name: str = "") -> AppOverride:
+        executable = normalize_executable(executable)
+        override = AppOverride(id=new_id(), executable=executable, name=(name or "").strip()[:80])
+        with self._lock:
+            try:
+                self.conn.execute(
+                    "INSERT INTO app_overrides (id, executable, name, is_enabled, created_at, updated_at)"
+                    " VALUES (?, ?, ?, 1, ?, ?)",
+                    (
+                        override.id,
+                        override.executable,
+                        override.name,
+                        override.created_at,
+                        override.updated_at,
+                    ),
+                )
+                self.conn.commit()
+            except sqlite3.IntegrityError:
+                self.conn.rollback()
+                raise ValueError("\u201c" + executable + "\u201d already has an app override.") from None
+        return override
+
+    def update_app_override(self, override: AppOverride) -> None:
+        override.name = (override.name or "").strip()[:80]
+        override.updated_at = utc_now()
+        with self._lock:
+            self.conn.execute(
+                "UPDATE app_overrides SET name = ?, is_enabled = ?, updated_at = ? WHERE id = ?",
+                (override.name, 1 if override.is_enabled else 0, override.updated_at, override.id),
+            )
+            self.conn.commit()
+
+    def delete_app_override(self, override_id: str) -> None:
+        with self._lock:
+            self.conn.execute("DELETE FROM mappings WHERE override_id = ?", (override_id,))
+            self.conn.execute("DELETE FROM app_overrides WHERE id = ?", (override_id,))
+            self.conn.commit()
+
     # -- mappings ----------------------------------------------------------
     def list_mappings(self, profile_id: str | None = None) -> list[Mapping]:
         with self._lock:
@@ -296,36 +366,46 @@ class Database:
                 rows = self.conn.execute("SELECT * FROM mappings ORDER BY created_at ASC").fetchall()
         return [Mapping.from_row(r) for r in rows]
 
+    def list_override_mappings(self, override_id: str) -> list[Mapping]:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT * FROM mappings WHERE override_id = ? ORDER BY created_at ASC", (override_id,)
+            ).fetchall()
+        return [Mapping.from_row(r) for r in rows]
+
     def get_mapping(self, mapping_id: str) -> Mapping | None:
         with self._lock:
             row = self.conn.execute("SELECT * FROM mappings WHERE id = ?", (mapping_id,)).fetchone()
         return Mapping.from_row(row) if row else None
 
     def save_mapping(self, mapping: Mapping) -> Mapping:
+        if bool(mapping.profile_id) == bool(mapping.override_id):
+            raise ValueError("A mapping belongs either to a profile or to an app override.")
         mapping.updated_at = utc_now()
         row = mapping.to_row()
         with self._lock:
             exists = self.conn.execute("SELECT 1 FROM mappings WHERE id = ?", (mapping.id,)).fetchone()
             if exists:
                 self.conn.execute(
-                    "UPDATE mappings SET profile_id=?, name=?, description=?, input_configuration=?,"
-                    " output_configuration=?, mapping_type=?, trigger_behavior=?, delay=?, is_enabled=?,"
-                    " updated_at=? WHERE id=?",
+                    "UPDATE mappings SET profile_id=?, override_id=?, name=?, description=?,"
+                    " input_configuration=?, output_configuration=?, mapping_type=?, trigger_behavior=?,"
+                    " delay=?, is_enabled=?, updated_at=? WHERE id=?",
                     (
-                        row["profile_id"], row["name"], row["description"], row["input_configuration"],
-                        row["output_configuration"], row["mapping_type"], row["trigger_behavior"],
-                        row["delay"], row["is_enabled"], row["updated_at"], row["id"],
+                        row["profile_id"], row["override_id"], row["name"], row["description"],
+                        row["input_configuration"], row["output_configuration"], row["mapping_type"],
+                        row["trigger_behavior"], row["delay"], row["is_enabled"], row["updated_at"], row["id"],
                     ),
                 )
             else:
                 self.conn.execute(
-                    "INSERT INTO mappings (id, profile_id, name, description, input_configuration,"
+                    "INSERT INTO mappings (id, profile_id, override_id, name, description, input_configuration,"
                     " output_configuration, mapping_type, trigger_behavior, delay, is_enabled, created_at, updated_at)"
-                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        row["id"], row["profile_id"], row["name"], row["description"], row["input_configuration"],
-                        row["output_configuration"], row["mapping_type"], row["trigger_behavior"], row["delay"],
-                        row["is_enabled"], row["created_at"], row["updated_at"],
+                        row["id"], row["profile_id"], row["override_id"], row["name"], row["description"],
+                        row["input_configuration"], row["output_configuration"], row["mapping_type"],
+                        row["trigger_behavior"], row["delay"], row["is_enabled"], row["created_at"],
+                        row["updated_at"],
                     ),
                 )
             self.conn.commit()
@@ -414,15 +494,30 @@ class Database:
         mappings: Iterable[Mapping],
         active_id: str,
         app_rules: Iterable[AppRule] = (),
+        app_overrides: Iterable[AppOverride] = (),
     ) -> None:
-        """Atomically replace every profile, mapping and app rule (used by import)."""
+        """Atomically replace every profile, mapping, app rule and override (import)."""
         with self._lock:
             connection = self.conn
             try:
                 connection.execute("BEGIN")
                 connection.execute("DELETE FROM app_rules")
                 connection.execute("DELETE FROM mappings")
+                connection.execute("DELETE FROM app_overrides")
                 connection.execute("DELETE FROM profiles")
+                for override in app_overrides:
+                    connection.execute(
+                        "INSERT INTO app_overrides (id, executable, name, is_enabled, created_at, updated_at)"
+                        " VALUES (?, ?, ?, ?, ?, ?)",
+                        (
+                            override.id,
+                            override.executable,
+                            override.name,
+                            1 if override.is_enabled else 0,
+                            override.created_at,
+                            override.updated_at,
+                        ),
+                    )
                 for profile in profiles:
                     connection.execute(
                         "INSERT INTO profiles (id, name, description, created_at, updated_at, is_active)"
@@ -440,11 +535,11 @@ class Database:
                 for mapping in mappings:
                     row = mapping.to_row()
                     connection.execute(
-                        "INSERT INTO mappings (id, profile_id, name, description, input_configuration,"
+                        "INSERT INTO mappings (id, profile_id, override_id, name, description, input_configuration,"
                         " output_configuration, mapping_type, trigger_behavior, delay, is_enabled, created_at, updated_at)"
-                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
-                            row["id"], row["profile_id"], row["name"], row["description"],
+                            row["id"], row["profile_id"], row["override_id"], row["name"], row["description"],
                             row["input_configuration"], row["output_configuration"], row["mapping_type"],
                             row["trigger_behavior"], row["delay"], row["is_enabled"], row["created_at"],
                             row["updated_at"],

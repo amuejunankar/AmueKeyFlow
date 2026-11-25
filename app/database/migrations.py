@@ -70,9 +70,56 @@ CREATE TABLE IF NOT EXISTS app_rules (
 CREATE INDEX IF NOT EXISTS idx_app_rules_profile ON app_rules(profile_id);
 """
 
+#: Per-app overrides plus mappings that belong to an override instead of a
+#: profile.  SQLite cannot relax the old ``profile_id NOT NULL`` constraint in
+#: place, so the mappings table is rebuilt and its rows copied over.
+SCHEMA_V3 = """
+CREATE TABLE IF NOT EXISTS app_overrides (
+    id         TEXT PRIMARY KEY,
+    executable TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    name       TEXT NOT NULL DEFAULT '',
+    is_enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS mappings_v3 (
+    id                   TEXT PRIMARY KEY,
+    profile_id           TEXT REFERENCES profiles(id) ON DELETE CASCADE,
+    override_id          TEXT REFERENCES app_overrides(id) ON DELETE CASCADE,
+    name                 TEXT NOT NULL DEFAULT '',
+    description          TEXT NOT NULL DEFAULT '',
+    input_configuration  TEXT NOT NULL,
+    output_configuration TEXT NOT NULL,
+    mapping_type         TEXT NOT NULL,
+    trigger_behavior     TEXT NOT NULL DEFAULT 'press',
+    delay                INTEGER NOT NULL DEFAULT 0,
+    is_enabled           INTEGER NOT NULL DEFAULT 1,
+    created_at           TEXT NOT NULL,
+    updated_at           TEXT NOT NULL,
+    CHECK ((profile_id IS NOT NULL AND override_id IS NULL)
+        OR (profile_id IS NULL AND override_id IS NOT NULL))
+);
+
+INSERT INTO mappings_v3 (id, profile_id, override_id, name, description, input_configuration,
+    output_configuration, mapping_type, trigger_behavior, delay, is_enabled, created_at, updated_at)
+SELECT id, profile_id, NULL, name, description, input_configuration, output_configuration,
+    mapping_type, trigger_behavior, delay, is_enabled, created_at, updated_at
+FROM mappings;
+
+DROP TABLE mappings;
+
+ALTER TABLE mappings_v3 RENAME TO mappings;
+
+CREATE INDEX IF NOT EXISTS idx_mappings_profile ON mappings(profile_id);
+CREATE INDEX IF NOT EXISTS idx_mappings_override ON mappings(override_id);
+CREATE INDEX IF NOT EXISTS idx_mappings_updated ON mappings(updated_at DESC);
+"""
+
 MIGRATIONS: dict[int, str] = {
     1: SCHEMA_V1,
     2: SCHEMA_V2,
+    3: SCHEMA_V3,
 }
 
 

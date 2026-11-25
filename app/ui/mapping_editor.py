@@ -389,7 +389,13 @@ class MacroEditor(QWidget):
 
 
 class MappingEditor(FramelessSheet):
-    def __init__(self, controller, mapping: Mapping | None = None, parent: QWidget | None = None):
+    def __init__(
+        self,
+        controller,
+        mapping: Mapping | None = None,
+        parent: QWidget | None = None,
+        override_id: str | None = None,
+    ):
         is_new = mapping is None
         super().__init__(
             parent,
@@ -399,6 +405,12 @@ class MappingEditor(FramelessSheet):
         )
         self.controller = controller
         self.mapping = mapping
+        self.override_id = override_id if override_id is not None else (mapping.override_id if mapping else None)
+        if self.override_id:
+            override = controller.db.get_app_override(self.override_id)
+            if override is not None:
+                self.subtitle_label.setText(f"Saving into the {override.executable} app override.")
+                self.subtitle_label.setVisible(True)
         self._recording = False
         self._record_target = "input"
         self._bridge = _RecorderBridge()
@@ -986,13 +998,14 @@ class MappingEditor(FramelessSheet):
             return
         candidate = Mapping(
             id=self.mapping.id if self.mapping else "candidate",
-            profile_id=self.controller.profiles.active_id,
+            profile_id=None if self.override_id else self.controller.profiles.active_id,
+            override_id=self.override_id,
             name="",
             input_config=chord,
             output_config={},
             mapping_type="key",
         )
-        other = has_conflict(candidate, self.controller.profiles.active_mappings())
+        other = has_conflict(candidate, self.controller.mappings_for_scope(self.override_id))
         if other is not None:
             self.conflict_label.setText(
                 f"⚠  {chord_display(chord)} is already used by “{other.name or other.input_display}”. "
@@ -1057,7 +1070,10 @@ class MappingEditor(FramelessSheet):
 
         candidate = Mapping(
             id=self.mapping.id if self.mapping else new_id(),
-            profile_id=self.mapping.profile_id if self.mapping else self.controller.profiles.active_id,
+            profile_id=None
+            if self.override_id
+            else (self.mapping.profile_id if self.mapping else self.controller.profiles.active_id),
+            override_id=self.override_id,
             name=name,
             description=self.description_input.text().strip(),
             input_config=make_chord([str(m) for m in chord.get("mods", [])], str(chord["key"])),
@@ -1071,7 +1087,7 @@ class MappingEditor(FramelessSheet):
         )
 
         if self.controller.settings.get_bool("conflict_warnings", True):
-            other = has_conflict(candidate, self.controller.profiles.active_mappings())
+            other = has_conflict(candidate, self.controller.mappings_for_scope(self.override_id))
             if other is not None:
                 proceed = ConfirmDialog.ask(
                     self,

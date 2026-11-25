@@ -8,7 +8,7 @@ from pathlib import Path
 
 APP_NAME = "Amue KeyFlow"
 APP_SLUG = "AmueKeyFlow"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.6.0"
 APP_PUBLISHER = "Amue"
 APP_DESCRIPTION = "Windows keyboard mapper and shortcut automation"
 
@@ -17,7 +17,7 @@ APP_DESCRIPTION = "Windows keyboard mapper and shortcut automation"
 #: recursion protection of the engine.
 INJECTION_TAG = 0x4B464C57  # "KFLW"
 
-CONFIG_SCHEMA_VERSION = 2
+CONFIG_SCHEMA_VERSION = 3
 
 #: Keys that Windows never delivers to user-mode low level hooks.  Used only for
 #: documentation/warnings inside the UI.

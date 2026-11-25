@@ -7,6 +7,7 @@ from PySide6.QtGui import QFont, QLinearGradient, QPainter, QPen
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from app.constants import APP_VERSION
+from app.ui.components.chips import Pill
 from app.ui.icons import icon_pixmap
 from app.ui.theme import color, palette
 
@@ -162,6 +163,17 @@ class Sidebar(QFrame):
 
         layout.addStretch(1)
 
+        self.override_host = QWidget()
+        override_layout = QHBoxLayout(self.override_host)
+        override_layout.setContentsMargins(10, 0, 10, 6)
+        override_layout.setSpacing(6)
+        self.override_pill = Pill("", "info", compact=True, dot=False)
+        self.override_pill.setToolTip("An app override is layered on top of the active profile")
+        override_layout.addWidget(self.override_pill)
+        override_layout.addStretch(1)
+        self.override_host.setVisible(False)
+        layout.addWidget(self.override_host)
+
         self.status_card = _StatusCard()
         layout.addWidget(self.status_card)
 
@@ -181,6 +193,16 @@ class Sidebar(QFrame):
 
     def set_status(self, running: bool, enabled: bool, paused: bool, emergency: bool) -> None:
         self.status_card.set_state(running, enabled, paused, emergency)
+
+    def set_override(self, override) -> None:
+        """Show the app override that is currently layered on the profile."""
+        if override is None:
+            self.override_host.setVisible(False)
+            return
+        count = getattr(override, "mapping_count", 0)
+        label = override.executable if not count else f"{override.executable} \u00b7 {count}"
+        self.override_pill.set_text(label)
+        self.override_host.setVisible(True)
 
     def paintEvent(self, event):  # noqa: N802
         p = palette()

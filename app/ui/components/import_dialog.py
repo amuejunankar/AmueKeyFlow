@@ -36,13 +36,14 @@ class ImportDialog(FramelessSheet):
         profile_count: int,
         mapping_count: int,
         file_name: str,
+        override_count: int = 0,
     ):
         super().__init__(parent, "Import configuration", file_name, width=560)
         self.mode: str | None = None
-        intro = QLabel(
-            f"The file contains {profile_count} profile(s) and {mapping_count} mapping(s). "
-            "Choose how it should be applied."
-        )
+        contents = f"{profile_count} profile(s) and {mapping_count} mapping(s)"
+        if override_count:
+            contents += f", plus {override_count} app override(s)"
+        intro = QLabel(f"The file contains {contents}. Choose how it should be applied.")
         intro.setWordWrap(True)
         self.body.addWidget(intro)
 
@@ -55,8 +56,8 @@ class ImportDialog(FramelessSheet):
         self.body.addWidget(merge)
 
         replace = QLabel(
-            "<b>Replace everything</b> — deletes the current profiles and mappings and restores the file exactly. "
-            "A backup is created automatically first."
+            "<b>Replace everything</b> — deletes the current profiles, mappings and app overrides and "
+            "restores the file exactly. A backup is created automatically first."
         )
         replace.setWordWrap(True)
         replace.setProperty("muted", True)

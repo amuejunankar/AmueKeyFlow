@@ -46,12 +46,19 @@ class Profile:
 
 @dataclass
 class Mapping:
+    """One mapping, owned either by a profile or by an app override.
+
+    Exactly one of ``profile_id`` / ``override_id`` is set; the database enforces
+    the same rule with a CHECK constraint.
+    """
+
     id: str
-    profile_id: str
     name: str
     input_config: dict[str, Any]
     output_config: dict[str, Any]
     mapping_type: str
+    profile_id: str | None = None
+    override_id: str | None = None
     description: str = ""
     trigger_behavior: str = "press"
     delay: int = 0
@@ -67,10 +74,20 @@ class Mapping:
     def output_display(self) -> str:
         return describe_output(self.mapping_type, self.output_config)
 
+    @property
+    def is_override(self) -> bool:
+        return self.override_id is not None
+
+    @property
+    def scope_key(self) -> str:
+        """Identifier of the profile or override this mapping belongs to."""
+        return self.override_id or self.profile_id or ""
+
     def to_row(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "profile_id": self.profile_id,
+            "override_id": self.override_id,
             "name": self.name,
             "description": self.description,
             "input_configuration": json.dumps(self.input_config, separators=(",", ":")),
@@ -85,9 +102,11 @@ class Mapping:
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> "Mapping":
+        keys = row.keys()
         return cls(
             id=row["id"],
             profile_id=row["profile_id"],
+            override_id=row["override_id"] if "override_id" in keys else None,
             name=row["name"] or "",
             description=row["description"] or "",
             input_config=json.loads(row["input_configuration"]),
@@ -100,11 +119,15 @@ class Mapping:
             updated_at=row["updated_at"],
         )
 
-    def clone(self, profile_id: str | None = None) -> "Mapping":
+    def clone(self, profile_id: str | None = None, override_id: str | None = None) -> "Mapping":
+        """Copy this mapping, optionally into another profile or app override."""
+        if profile_id is None and override_id is None:
+            profile_id, override_id = self.profile_id, self.override_id
         now = utc_now()
         return Mapping(
             id=new_id(),
-            profile_id=profile_id or self.profile_id,
+            profile_id=profile_id,
+            override_id=override_id,
             name=self.name,
             description=self.description,
             input_config=json.loads(json.dumps(self.input_config)),
@@ -147,6 +170,36 @@ def normalize_executable(value: str) -> str:
     if not re.fullmatch(r"[a-z0-9][a-z0-9 ._+\-()]{0,118}\.exe", name):
         raise ValueError(f"“{value}” is not a valid Windows application name.")
     return name
+
+
+@dataclass
+class AppOverride:
+    """Mappings layered on top of the active profile while one app is in front."""
+
+    id: str
+    executable: str
+    name: str = ""
+    is_enabled: bool = True
+    created_at: str = field(default_factory=utc_now)
+    updated_at: str = field(default_factory=utc_now)
+    mapping_count: int = 0
+
+    @property
+    def display_name(self) -> str:
+        return self.name or self.executable
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> "AppOverride":
+        keys = row.keys()
+        return cls(
+            id=row["id"],
+            executable=row["executable"],
+            name=row["name"] or "",
+            is_enabled=bool(row["is_enabled"]),
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
+            mapping_count=int(row["mapping_count"]) if "mapping_count" in keys else 0,
+        )
 
 
 @dataclass

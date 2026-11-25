@@ -24,7 +24,7 @@ from app.constants import (
     LOG_FORMAT,
 )
 from app.database.database import Database
-from app.database.models import Mapping
+from app.database.models import AppOverride, Mapping
 from app.engine.conflict_detector import conflicts_by_mapping
 from app.engine.engine import MappingEngine
 from app.engine.safety_manager import SafetyManager
@@ -33,6 +33,7 @@ from app.services.import_export import (
     ImportValidationError,
     import_payload,
     load_payload,
+    parse_overrides,
     parse_payload,
     write_export,
 )
@@ -47,7 +48,7 @@ from app.ui.components.dialogs import ConfirmDialog, SearchDialog, Toast
 from app.ui.components.import_dialog import ImportDialog, MessageSheet
 from app.ui.icons import clear_cache as clear_icon_cache
 from app.ui.mapping_editor import MappingEditor
-from app.ui.profiles import AppRulesDialog, ProfileDialog
+from app.ui.profiles import AppOverrideDialog, AppRulesDialog, ProfileDialog
 
 log = logging.getLogger(__name__)
 
@@ -85,6 +86,8 @@ class AppController(QObject):
         self._refreshing = False
         self._shutting_down = False
         self._tray_hint_shown = False
+        self._active_override: AppOverride | None = None
+        self._engine_scope: tuple[str, str] = ("", "")
 
         for folder in (DATA_DIR, LOG_DIR, EXPORT_DIR):
             folder.mkdir(parents=True, exist_ok=True)
@@ -147,7 +150,7 @@ class AppController(QObject):
         self._conflict_cache = set(
             conflicts_by_mapping(self.profiles.active_mappings())
         )
-        self.engine.set_mappings(self.profiles.active_mappings())
+        self._sync_engine_scope(force=True)
         self.engine.configure()
 
     # -- attachments -------------------------------------------------------
@@ -269,9 +272,8 @@ class AppController(QObject):
             return
         self._refreshing = True
         try:
-            mappings = self.profiles.active_mappings()
-            self._conflict_cache = set(conflicts_by_mapping(mappings))
-            self.engine.set_mappings(mappings)
+            self._conflict_cache = set(conflicts_by_mapping(self.profiles.active_mappings()))
+            self._sync_engine_scope(force=True)
             self.engine.configure()
             if self.window is not None:
                 if full:
@@ -408,8 +410,8 @@ class AppController(QObject):
     def _editor_parent(self):
         return self.window
 
-    def create_mapping(self) -> None:
-        dialog = MappingEditor(self, None, self._editor_parent())
+    def create_mapping(self, override_id: str | None = None) -> None:
+        dialog = MappingEditor(self, None, self._editor_parent(), override_id=override_id)
         dialog.center_on_parent()
         dialog.exec()
         self.refresh_state(full=True)
@@ -460,7 +462,8 @@ class AppController(QObject):
             confirmed = ConfirmDialog.ask(
                 self.window,
                 "Delete mapping?",
-                f"“{mapping.name or mapping.input_display}” will be permanently removed from this profile.",
+                f"\u201c{mapping.name or mapping.input_display}\u201d will be permanently removed from "
+                f"{'this app override' if mapping.is_override else 'this profile'}.",
                 "Delete",
                 danger=True,
             )
@@ -483,6 +486,94 @@ class AppController(QObject):
         self.db.set_mappings_enabled(self.profiles.active_id, enabled)
         self.refresh_state(full=True)
         self.notify(f"All mappings in “{self.profiles.active.name}” {'enabled' if enabled else 'disabled'}.", "info")
+
+    # -- app overrides -----------------------------------------------------
+    def mappings_for_scope(self, override_id: str | None) -> list[Mapping]:
+        if override_id:
+            return self.db.list_override_mappings(override_id)
+        return self.profiles.active_mappings()
+
+    def mappings_for_engine(self) -> list[Mapping]:
+        """Override mappings first: the engine index keeps the first match."""
+        override = self.active_override()
+        if override is not None:
+            return self.db.list_override_mappings(override.id) + self.profiles.active_mappings()
+        return self.profiles.active_mappings()
+
+    def all_mappings(self) -> list[Mapping]:
+        mappings = self.profiles.active_mappings()
+        for override in self.db.list_app_overrides():
+            mappings.extend(self.db.list_override_mappings(override.id))
+        return mappings
+
+    def active_override(self) -> AppOverride | None:
+        override = self._active_override
+        return override if override is not None and override.is_enabled else None
+
+    def _sync_engine_scope(self, force: bool = False) -> None:
+        override = self.active_override()
+        signature = (self.profiles.active_id, override.id if override else "")
+        if not force and signature == self._engine_scope:
+            self._update_override_indicator()
+            return
+        self._engine_scope = signature
+        self.engine.set_mappings(self.mappings_for_engine())
+        self._update_override_indicator()
+
+    def _update_override_indicator(self) -> None:
+        if self.window is None:
+            return
+        override = self.active_override()
+        fresh = self.db.get_app_override(override.id) if override else None
+        self.window.sidebar.set_override(fresh)
+
+    def add_app_override(self) -> str | None:
+        dialog = AppOverrideDialog(self, self._editor_parent())
+        dialog.center_on_parent()
+        if dialog.exec() != dialog.Accepted or not dialog.result:
+            return None
+        try:
+            override = self.db.create_app_override(*dialog.result)
+        except ValueError as exc:
+            self.notify(str(exc), "error")
+            return None
+        self.refresh_state(full=True)
+        self.notify(f"App override for {override.executable} created.", "success")
+        return override.id
+
+    def delete_app_override(self, override_id: str) -> None:
+        override = self.db.get_app_override(override_id)
+        if override is None:
+            return
+        count = len(self.db.list_override_mappings(override_id))
+        if self.window is not None and not ConfirmDialog.ask(
+            self.window,
+            "Delete app override?",
+            f"\u201c{override.executable}\u201d returns to your normal profile behaviour and "
+            f"{count} override mapping(s) are removed.",
+            "Delete override",
+            danger=True,
+        ):
+            return
+        self.db.delete_app_override(override_id)
+        if self._active_override is not None and self._active_override.id == override_id:
+            self._active_override = None
+        self.refresh_state(full=True)
+        self.notify("App override deleted.", "info")
+
+    def set_app_override_enabled(self, override_id: str, enabled: bool) -> None:
+        override = self.db.get_app_override(override_id)
+        if override is None:
+            return
+        override.is_enabled = bool(enabled)
+        self.db.update_app_override(override)
+        if self._active_override is not None and self._active_override.id == override_id:
+            self._active_override = override
+        self.refresh_state(full=True)
+        self.notify(
+            "App override enabled." if enabled else "App override disabled \u2014 the profile applies normally.",
+            "info",
+        )
 
     # -- engine operations -------------------------------------------------
     def set_mappings_enabled(self, enabled: bool) -> None:
@@ -549,9 +640,12 @@ class AppController(QObject):
         self.notify(f"Switched to profile “{profile.name}”.", "success")
 
     def _on_foreground_app(self, executable: str) -> None:
-        """Auto-activate the profile that owns a rule for this app."""
+        """Layer app overrides on top of the active profile and apply app rules."""
         if self._shutting_down or not executable:
             return
+        self._active_override = self.db.app_override_for_executable(executable)
+        self._sync_engine_scope()
+
         if not self.settings.get_bool("auto_switch_profiles", True):
             return
         # Never change profiles underneath an open dialog (editor, recorder, …).
@@ -645,6 +739,12 @@ class AppController(QObject):
     def _export_rules(self, profiles) -> dict[str, list[str]]:
         return {profile.id: [rule.executable for rule in self.db.list_app_rules(profile.id)] for profile in profiles}
 
+    def _export_overrides(self) -> list[tuple]:
+        return [
+            (override, self.db.list_override_mappings(override.id))
+            for override in self.db.list_app_overrides()
+        ]
+
     def export_profile(self, profile_id: str) -> None:
         profile = self.db.get_profile(profile_id)
         if profile is None:
@@ -673,7 +773,12 @@ class AppController(QObject):
             return
         try:
             profiles = self.profiles.profiles()
-            write_export(path, self._export_entries(profiles), self._export_rules(profiles))
+            write_export(
+                path,
+                self._export_entries(profiles),
+                self._export_rules(profiles),
+                self._export_overrides(),
+            )
         except OSError as exc:
             self.notify(f"Could not write the file: {exc}", "error")
             return
@@ -688,6 +793,7 @@ class AppController(QObject):
         try:
             payload = load_payload(path)
             parsed = parse_payload(payload)
+            parsed_overrides = parse_overrides(payload)
         except ImportValidationError as exc:
             MessageSheet.show_message(self.window, "Import failed", str(exc))
             return
@@ -698,7 +804,9 @@ class AppController(QObject):
 
         profile_count = len(parsed)
         mapping_count = sum(len(mappings) for _, mappings in parsed)
-        dialog = ImportDialog(self.window, profile_count, mapping_count, Path(path).name)
+        dialog = ImportDialog(
+            self.window, profile_count, mapping_count, Path(path).name, len(parsed_overrides)
+        )
         dialog.center_on_parent()
         if dialog.exec() != dialog.Accepted or not dialog.mode:
             return
@@ -708,8 +816,8 @@ class AppController(QObject):
             if self.window is not None and not ConfirmDialog.ask(
                 self.window,
                 "Replace the current configuration?",
-                "Every existing profile and mapping will be deleted and replaced by the imported file. "
-                "A database backup is created first.",
+                "Every existing profile, mapping and app override will be deleted and replaced by the "
+                "imported file. A database backup is created first.",
                 "Replace everything",
                 danger=True,
             ):
