@@ -214,7 +214,7 @@ def test_find_device_matches_by_name_and_falls_back():
 
 
 def test_picker_hides_duplicates_and_noise():
-    """The dropdown must not list every host API, stereo mix, or offline Bluetooth."""
+    """One row per device name, without stereo mix or unnamed placeholders."""
     pool = [
         _device(0, "Windows default microphone", "Windows DirectSound", 1, 0),
         _device(1, "Input ()", "Windows WDM-KS", 2, 0),
@@ -232,14 +232,42 @@ def test_picker_hides_duplicates_and_noise():
     ]
     picked = devices.pick_devices(pool, prefer_input=True)
     labels = [d.label for d in picked]
-    assert labels == ["Microphone (Realtek HD Audio Mic input)", "Windows default microphone"]
-    assert picked[0].host_api == "Windows WASAPI"
+    # The duplicate microphone keeps its shared-API copy...
+    assert labels.count("Microphone (Realtek HD Audio Mic input)") == 1
+    assert picked[labels.index("Microphone (Realtek HD Audio Mic input)")].host_api == "Windows WASAPI"
+    # ...while a headset that only exists on WDM-KS is still offered.
+    assert "Google Pixel 6a — input" in labels
+    assert not any(label.startswith("Input (") or label.startswith("Line In") for label in labels)
+    assert not any("Stereo Mix" in label for label in labels)
+
+
+def test_picker_keeps_devices_that_only_exist_on_one_host_api():
+    """Regression: WDM-KS-only speakers and microphones disappeared from Voice FX."""
+    pool = [
+        _device(0, "Speakers (Realtek HDA Primary output)", "Windows WDM-KS", 0, 6),
+        _device(1, "Digital Output (AMD High Definition Audio Device)", "Windows WASAPI", 0, 2),
+        _device(2, "Headphones ()", "Windows WDM-KS", 0, 2),
+        _device(3, "Microphone (Realtek HD Audio Mic input)", "Windows WDM-KS", 2, 0),
+    ]
+    outputs = devices.pick_devices(pool, prefer_input=False)
+    output_labels = [d.label for d in outputs]
+    assert "Speakers (Realtek HDA Primary output)" in output_labels
+    assert "Digital Output (AMD High Definition Audio Device)" in output_labels
+    assert "Headphones ()" not in output_labels
+
+    inputs = devices.pick_devices(pool, prefer_input=True)
+    assert [d.label for d in inputs] == ["Microphone (Realtek HD Audio Mic input)"]
+    assert not devices.is_placeholder_endpoint("Microphone (Realtek HD Audio Mic input)")
+    assert devices.is_placeholder_endpoint("Headphones ()")
+    assert devices.is_placeholder_endpoint("Speakers ( )")
 
 
 def test_friendly_bluetooth_name():
     raw = "Headset (@System32\\drivers\\bthhfenum.sys,#2;%1 Hands-Free%0 ;(boAt Rugbyy))"
     assert devices.friendly_name(raw) == "boAt Rugbyy — headset"
     assert devices.friendly_name("Speakers (Realtek(R) Audio)") == "Speakers (Realtek(R) Audio)"
+    # Driver names carry stray CR/LF; they must not reach the dropdown.
+    assert devices.friendly_name("Speakers (Realtek\r\nAudio)") == "Speakers (Realtek Audio)"
     assert devices.is_noise_name("Input ()")
     assert devices.is_noise_name("Microsoft Sound Mapper - Output")
     assert not devices.is_noise_name("Microphone (USB Audio)")

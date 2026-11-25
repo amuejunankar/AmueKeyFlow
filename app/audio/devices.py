@@ -101,6 +101,12 @@ _DRIVER_SUFFIX = re.compile(r"\s*\(@System32.*$", re.I)
 _DRIVER_DEVICE = re.compile(r";\s*\(([^()]+)\)\s*\)\s*$")
 _PLACEHOLDER = re.compile(r"%\d")
 
+#: WDM-KS exposes paired-but-disconnected hardware as a bare role with empty
+#: parentheses (``Headphones ()``); several devices share that useless name.
+_PLACEHOLDER_ENDPOINT = re.compile(
+    r"^(?:input|output|microphone|headphones?|speakers?|headset)\s*\(\s*\)$", re.I
+)
+
 
 def friendly_name(name: str) -> str:
     """A device name worth showing in a dropdown.
@@ -117,8 +123,16 @@ def friendly_name(name: str) -> str:
         if inner:
             text = f"{inner} — {role.lower()}" if role else inner
     text = _PLACEHOLDER.sub("", _DRIVER_SUFFIX.sub("", text))
-    text = re.sub(r"\s{2,}", " ", text).strip(" -")
+    # PortAudio names contain stray CR/LF from the driver strings; collapse every
+    # whitespace run so a device never renders with a replacement glyph.
+    text = re.sub(r"\s+", " ", text).strip(" -")
     return text or str(name or "").strip()
+
+
+def is_placeholder_endpoint(name: str) -> bool:
+    """True for a driver placeholder rather than a real, named endpoint."""
+    cleaned = friendly_name(name).strip()
+    return not cleaned or bool(_PLACEHOLDER_ENDPOINT.match(cleaned))
 
 
 def is_noise_name(name: str) -> bool:
@@ -133,24 +147,20 @@ def is_noise_name(name: str) -> bool:
 
 
 def pick_devices(devices: list[AudioDevice], prefer_input: bool) -> list[AudioDevice]:
-    """The short list a user should choose from.
+    """The list of endpoints a person should choose from.
 
     Windows lists every endpoint once per host API, so one microphone can appear
     as WASAPI, DirectSound, MME and WDM-KS.  Keep the best-mapped copy of each
-    name, drop non-microphone endpoints, and skip WDM-KS entirely while a shared
-    API is available (WDM-KS also exposes paired-but-offline hardware).
+    name and drop non-microphone endpoints, but never hide a device that only
+    exists on one host API: a Bluetooth headset or a Realtek speaker set is often
+    WDM-KS only, and the Voice FX picker used to omit exactly those.
     """
     pool = [d for d in devices if (d.is_input if prefer_input else d.is_output)]
-    filtered = [d for d in pool if not is_noise_name(d.name)]
+    filtered = [
+        d for d in pool if not is_noise_name(d.name) and not is_placeholder_endpoint(d.name)
+    ]
     if not filtered:
-        filtered = pool
-    # WDM-KS also lists paired-but-offline hardware by driver-internal name; a
-    # connected device always has a normal endpoint too, so those are duplicates.
-    plain = [d for d in filtered if "@system32" not in d.name.lower()]
-    if plain:
-        filtered = plain
-    if any(api_rank(d.host_api) <= 1 for d in filtered):
-        filtered = [d for d in filtered if api_rank(d.host_api) <= 1]
+        filtered = [d for d in pool if not is_placeholder_endpoint(d.name)] or pool
 
     picked: list[AudioDevice] = []
     kept: list[tuple[str, bool]] = []
@@ -188,6 +198,21 @@ def default_device_name(kind: str) -> str:
         return str(info.get("name", ""))
     except Exception:
         return ""
+
+
+def default_device_index(kind: str) -> int | None:
+    """PortAudio's default endpoint index for ``kind`` (``input``/``output``).
+
+    ``query_devices(kind=...)`` returns nothing (and raises) when Windows has no
+    default for that direction, while the index still names a usable endpoint.
+    """
+    try:
+        sd = sounddevice_module()
+        pair = sd.default.device
+        index = int(pair[0] if kind == "input" else pair[1])
+    except Exception:
+        return None
+    return index if index >= 0 else None
 
 
 _CACHE: list[AudioDevice] | None = None
@@ -280,6 +305,11 @@ def device_candidates(
         matches = [d for d in pool if d.name.strip().lower() == wanted]
         if not matches:
             matches = [d for d in pool if wanted in d.name.strip().lower()]
+        if matches:
+            return matches[:limit]
+    index = default_device_index("input" if prefer_input else "output")
+    if index is not None:
+        matches = [d for d in pool if d.index == index]
         if matches:
             return matches[:limit]
     default_name = default_device_name("input" if prefer_input else "output").strip().lower()

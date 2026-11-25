@@ -826,22 +826,25 @@ class VoiceFxPage(ScrollPage):
             combo.blockSignals(False)
             return
         combo.setEnabled(True)
+        options = audio_devices.pick_devices(found, prefer_input=inputs)
         auto_label = "Windows default microphone" if inputs else "Automatic (virtual microphone)"
         combo.addItem(auto_label, "")
         if not inputs:
             combo.addItem("No output (record only)", NO_OUTPUT)
-        current = saved
-        if not current and inputs:
-            resolved = audio_devices.find_device(found, "", prefer_input=True)
-            current = resolved.name if resolved is not None else ""
-        elif not current:
-            cable = audio_devices.virtual_cable_output(found)
-            current = cable.name if cable is not None else NO_OUTPUT
-        # Only the endpoints a person would actually pick: the best host API for
-        # each name, without stereo mix, line-in, offline Bluetooth duplicates.
-        for device in audio_devices.pick_devices(found, prefer_input=inputs):
+        # Only the endpoints a person would actually pick, one entry per name.
+        for device in options:
             combo.addItem(device.label, device.name)
             combo.setItemData(combo.count() - 1, f"{device.name}  ·  {device.host_api}", Qt.ToolTipRole)
+        # Resolve the automatic choice inside the visible list, so the combo shows
+        # the microphone that will actually be opened instead of falling back to
+        # its first row.
+        current = saved
+        if not current and inputs:
+            resolved = audio_devices.find_device(options, "", prefer_input=True)
+            current = resolved.name if resolved is not None else ""
+        elif not current:
+            cable = audio_devices.virtual_cable_output(options)
+            current = cable.name if cable is not None else NO_OUTPUT
         index = combo.findData(current)
         if index < 0 and current:
             wanted = audio_devices.friendly_name(current).casefold()

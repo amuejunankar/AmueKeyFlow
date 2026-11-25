@@ -77,7 +77,7 @@ import/export are all built in.
 ### From the executable
 
 Run `dist\AmueKeyFlow\AmueKeyFlow.exe` (after building, see below), or build the
-installer and run `installer\output\AmueKeyFlow-1.6.0-Setup.exe`.
+installer and run `installer\output\AmueKeyFlow-1.6.1-Setup.exe`.
 
 ### From source
 
@@ -486,7 +486,7 @@ powershell -ExecutionPolicy Bypass -File build\build.ps1
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\amue_keyflow.iss
 ```
 
-Result: `installer\output\AmueKeyFlow-1.6.0-Setup.exe` (~46 MB; the audio engine adds
+Result: `installer\output\AmueKeyFlow-1.6.1-Setup.exe` (~46 MB; the audio engine adds
 about 12 MB). The script is compatible
 with Inno Setup 6.0.5 and newer and was compiled and install-tested here. The installer
 offers Start Menu and optional desktop shortcuts, an optional per-user startup entry,
@@ -502,8 +502,31 @@ Build outputs are not committed. After the two commands above you have:
 
 ```
 dist\AmueKeyFlow\AmueKeyFlow.exe                     portable build
-installer\output\AmueKeyFlow-1.6.0-Setup.exe        installer
+installer\output\AmueKeyFlow-1.6.1-Setup.exe        installer
 ```
+
+### Code signing
+
+The executable and the Setup file can be Authenticode-signed so downloads show the
+publisher instead of "unknown publisher". The certificate is supplied only through
+environment variables; no key material is stored in the repository:
+
+```powershell
+$env:KEYFLOW_SIGN_PFX = "C:\keys\amue-keyflow.pfx"
+$env:KEYFLOW_SIGN_PFX_PASSWORD = "<certificate password>"
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Installer
+```
+
+Set `KEYFLOW_SIGN_THUMBPRINT` instead to sign with a certificate already installed in
+`Cert:\CurrentUser\My`. The build signs and verifies `AmueKeyFlow.exe`, then passes the
+sign tool to ISCC, so Setup, its uninstaller and Setup's temporary self-copies are all
+signed inside the compile — signing the Setup file afterwards by hand would leave those
+copies unsigned. A `.pfx` that does not exist, a thumbprint that is not installed or a
+certificate without a private key stops the build instead of producing an unsigned file.
+
+With no `KEYFLOW_SIGN_*` variable set the build is unsigned, exactly as before, and a
+plain `ISCC.exe installer\amue_keyflow.iss` stays unsigned too. See `signing\README.md`
+for every variable, timestamping and the verification commands.
 
 ---
 

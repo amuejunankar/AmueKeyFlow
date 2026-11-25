@@ -14,3 +14,9 @@ build/innosetup-winget.log
 tools/screens/
 installer/output/
 *.log
+
+# Code-signing material must never be committed (see signing/README.md).
+*.pfx
+*.p12
+*.cer
+*.pvk

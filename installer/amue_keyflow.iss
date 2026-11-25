@@ -7,11 +7,21 @@
 ; are removed before installing so only one installation ever exists.
 
 #define AppName "Amue KeyFlow"
-#define AppVersion "1.6.0"
+#define AppVersion "1.6.1"
 #define AppPublisher "Amue"
 #define AppExeName "AmueKeyFlow.exe"
 #define AppId "{{8B1B0F2F-5E8E-47F0-9C2A-1E0B8A6C4D11}"
 #define UninstallSubkey "Software\Microsoft\Windows\CurrentVersion\Uninstall\{{8B1B0F2F-5E8E-47F0-9C2A-1E0B8A6C4D11}}_is1"
+
+; Authenticode signing is driven from the compiler command line, so this script
+; never mentions the certificate or its password:
+;   ISCC.exe /DSIGN "/Skfwsign=<signtool command>" installer\amue_keyflow.iss
+; build.ps1 -Installer passes both arguments when a certificate is configured
+; (see signing\README.md). SignTool signs Setup, and with the default
+; SignedUninstaller=yes it also signs the uninstaller and every temporary
+; self-copy Setup launches. Without /DSIGN - a plain ISCC compile or a build
+; with no certificate - no signing directive is emitted and output stays
+; unsigned.
 
 [Setup]
 AppId={#AppId}
@@ -20,6 +30,10 @@ AppVersion={#AppVersion}
 AppVerName={#AppName} {#AppVersion}
 AppPublisher={#AppPublisher}
 VersionInfoVersion={#AppVersion}
+; Signed only when the compiler passes /DSIGN; see the note above.
+#ifdef SIGN
+SignTool=kfwsign
+#endif
 ; Fixed per-user location: no elevation, and every update replaces this copy.
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
