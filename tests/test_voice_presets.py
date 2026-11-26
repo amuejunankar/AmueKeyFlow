@@ -262,6 +262,46 @@ def test_picker_keeps_devices_that_only_exist_on_one_host_api():
     assert devices.is_placeholder_endpoint("Speakers ( )")
 
 
+_REALME_KS = (
+    "Headset (@System32\\drivers\\bthhfenum.sys,#2;%1 Hands-Free%0\r\n;(realme Buds Air 5))"
+)
+
+
+def test_bluetooth_identity_matches_across_host_apis():
+    """MME/WASAPI and WDM-KS spell one Bluetooth endpoint differently."""
+    assert devices.endpoint_identity(_REALME_KS)[1] == "realme buds air 5"
+    assert devices.same_device(_REALME_KS, "Headset (realme Buds Air 5)")
+    assert devices.same_device("Headset (realme Buds Air 5)", _REALME_KS)
+    # A2DP headphones are a different endpoint from the hands-free headset.
+    assert not devices.same_device("Headphones (realme Buds Air 5)", "Headset (realme Buds Air 5)")
+    assert not devices.same_device("Headset (boAt Rugby)", "Headset (realme Buds Air 5)")
+    assert not devices.same_device("Microphone (Realtek HD Audio Mic input)", _REALME_KS)
+
+
+def test_picker_prefers_shared_api_copy_of_bluetooth_microphone():
+    """One row for the buds, backed by the WASAPI copy instead of the KS stub."""
+    pool = [
+        _device(0, _REALME_KS, "Windows WDM-KS", 1, 0),
+        _device(1, "Headset (realme Buds Air 5)", "MME", 1, 0),
+        _device(2, "Headset (realme Buds Air 5)", "Windows WASAPI", 1, 0),
+    ]
+    picked = devices.pick_devices(pool, prefer_input=True)
+    assert [d.index for d in picked] == [2]
+    assert picked[0].host_api == "Windows WASAPI"
+
+
+def test_saved_wdm_ks_bluetooth_stub_resolves_to_the_shared_api_copy():
+    """A stub saved while WASAPI was absent must not be preferred later."""
+    pool = [
+        _device(0, _REALME_KS, "Windows WDM-KS", 1, 0),
+        _device(1, "Headset (realme Buds Air 5)", "MME", 1, 0),
+        _device(2, "Headset (realme Buds Air 5)", "Windows WASAPI", 1, 0),
+    ]
+    candidates = devices.device_candidates(pool, _REALME_KS, prefer_input=True)
+    assert [d.host_api for d in candidates] == ["Windows WASAPI", "MME", "Windows WDM-KS"]
+    assert devices.find_device(pool, _REALME_KS, prefer_input=True).index == 2
+
+
 def test_friendly_bluetooth_name():
     raw = "Headset (@System32\\drivers\\bthhfenum.sys,#2;%1 Hands-Free%0 ;(boAt Rugbyy))"
     assert devices.friendly_name(raw) == "boAt Rugbyy — headset"

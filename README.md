@@ -77,7 +77,7 @@ import/export are all built in.
 ### From the executable
 
 Run `dist\AmueKeyFlow\AmueKeyFlow.exe` (after building, see below), or build the
-installer and run `installer\output\AmueKeyFlow-1.6.1-Setup.exe`.
+installer and run `installer\output\AmueKeyFlow-1.6.2-Setup.exe`.
 
 ### From source
 
@@ -486,7 +486,7 @@ powershell -ExecutionPolicy Bypass -File build\build.ps1
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\amue_keyflow.iss
 ```
 
-Result: `installer\output\AmueKeyFlow-1.6.1-Setup.exe` (~46 MB; the audio engine adds
+Result: `installer\output\AmueKeyFlow-1.6.2-Setup.exe` (~46 MB; the audio engine adds
 about 12 MB). The script is compatible
 with Inno Setup 6.0.5 and newer and was compiled and install-tested here. The installer
 offers Start Menu and optional desktop shortcuts, an optional per-user startup entry,
@@ -502,7 +502,7 @@ Build outputs are not committed. After the two commands above you have:
 
 ```
 dist\AmueKeyFlow\AmueKeyFlow.exe                     portable build
-installer\output\AmueKeyFlow-1.6.1-Setup.exe        installer
+installer\output\AmueKeyFlow-1.6.2-Setup.exe        installer
 ```
 
 ### Code signing

@@ -847,9 +847,10 @@ class VoiceFxPage(ScrollPage):
             current = cable.name if cable is not None else NO_OUTPUT
         index = combo.findData(current)
         if index < 0 and current:
-            wanted = audio_devices.friendly_name(current).casefold()
+            # A saved WDM-KS Bluetooth stub is listed under its MME/WASAPI name;
+            # resolve it as the same endpoint so the combo shows the real choice.
             for position in range(combo.count()):
-                if audio_devices.friendly_name(str(combo.itemData(position) or "")).casefold() == wanted:
+                if audio_devices.same_device(str(combo.itemData(position) or ""), current):
                     index = position
                     break
         combo.setCurrentIndex(max(0, index))

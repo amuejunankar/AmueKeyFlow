@@ -83,7 +83,7 @@ the build with an explanation instead of silently producing an unsigned file.
 
 ```powershell
 Get-AuthenticodeSignature dist\AmueKeyFlow\AmueKeyFlow.exe | Format-List Status, StatusMessage, SignerCertificate
-Get-AuthenticodeSignature installer\output\AmueKeyFlow-1.6.1-Setup.exe | Format-List Status, StatusMessage, SignerCertificate
+Get-AuthenticodeSignature installer\output\AmueKeyFlow-1.6.2-Setup.exe | Format-List Status, StatusMessage, SignerCertificate
 ```
 
 `Status` must be `Valid` and `SignerCertificate.Subject` must name the

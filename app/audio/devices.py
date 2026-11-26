@@ -129,6 +129,63 @@ def friendly_name(name: str) -> str:
     return text or str(name or "").strip()
 
 
+#: The driver that exposes a Bluetooth hands-free link to WDM-KS.
+_BT_DRIVER = "bthhfenum"
+
+#: ``role (hardware name)`` as MME, DirectSound and WASAPI spell it.
+_ROLE_NAME = re.compile(r"^([^()]+?)\s*\((.*)\)\s*$")
+
+
+def _compact(text: str) -> str:
+    return re.sub(r"\s+", " ", str(text or "")).strip(" -").casefold()
+
+
+def is_bluetooth_descriptor(name: str) -> bool:
+    """True for the WDM-KS name bthhfenum gives a Bluetooth hands-free link."""
+    return _BT_DRIVER in str(name or "").lower()
+
+
+def endpoint_identity(name: str) -> tuple[str, str]:
+    """Split a device name into ``(role, hardware name)``.
+
+    One Bluetooth endpoint reaches PortAudio under different names per host API:
+    MME and WASAPI say ``Headset (realme Buds Air 5)`` while WDM-KS exposes the
+    driver string ``Headset (@System32\\drivers\\bthhfenum.sys,#2;%1 Hands-Free%0
+    ;(realme Buds Air 5))``.  Comparing raw names treats those as two devices, so
+    the picker lists both and the saved WDM-KS stub can beat the working copy.
+    """
+    text = str(name or "").strip()
+    if is_bluetooth_descriptor(text):
+        role = text.split("(", 1)[0]
+        match = _DRIVER_DEVICE.search(text)
+        return _compact(role), _compact(match.group(1) if match else "")
+    match = _ROLE_NAME.match(text)
+    if match:
+        return _compact(match.group(1)), _compact(match.group(2))
+    return "", _compact(text)
+
+
+def device_key(name: str) -> tuple[str, str]:
+    """A dedupe key: one entry per endpoint, whichever host API named it."""
+    role, inner = endpoint_identity(name)
+    return ("bluetooth" if is_bluetooth_descriptor(name) else role, inner)
+
+
+def same_device(first: str, second: str) -> bool:
+    """True when two names describe the same endpoint on different host APIs."""
+    role_a, inner_a = endpoint_identity(first)
+    role_b, inner_b = endpoint_identity(second)
+    if not inner_a or not inner_b:
+        return _compact(first) == _compact(second)
+    if inner_a != inner_b:
+        return False
+    # A bthhfenum role ("Hands-Free", "Input") never matches MME's "Headset",
+    # so for Bluetooth endpoints only the hardware name can be compared.
+    if is_bluetooth_descriptor(first) or is_bluetooth_descriptor(second):
+        return True
+    return role_a == role_b
+
+
 def is_placeholder_endpoint(name: str) -> bool:
     """True for a driver placeholder rather than a real, named endpoint."""
     cleaned = friendly_name(name).strip()
@@ -164,6 +221,7 @@ def pick_devices(devices: list[AudioDevice], prefer_input: bool) -> list[AudioDe
 
     picked: list[AudioDevice] = []
     kept: list[tuple[str, bool]] = []
+    kept_names: list[str] = []
     for device in sorted(filtered, key=lambda d: (api_rank(d.host_api), name_score(d.name), d.index)):
         text = friendly_name(device.name).casefold()
         # MME truncates names at 31 characters, so compare those as prefixes.
@@ -175,7 +233,12 @@ def pick_devices(devices: list[AudioDevice], prefer_input: bool) -> list[AudioDe
             for other, other_truncated in kept
         ):
             continue
+        # The best-ranked copy of an endpoint was kept first, so the WDM-KS stub
+        # of a Bluetooth headset never survives alongside its WASAPI/MME copy.
+        if any(same_device(device.name, name) for name in kept_names):
+            continue
         kept.append((text, truncated))
+        kept_names.append(device.name)
         picked.append(device)
     return picked
 
@@ -305,7 +368,17 @@ def device_candidates(
         matches = [d for d in pool if d.name.strip().lower() == wanted]
         if not matches:
             matches = [d for d in pool if wanted in d.name.strip().lower()]
+        if not matches:
+            # MME/WASAPI and WDM-KS name one Bluetooth endpoint differently.
+            matches = [d for d in pool if same_device(d.name, name)]
         if matches:
+            # Add every host-API copy of that endpoint. The pool is ordered best
+            # API first, so the working WASAPI/MME stream is tried before the
+            # WDM-KS stub that reports ERROR_DEVICE_NOT_CONNECTED.
+            targets = [d.name for d in matches]
+            matches = [
+                d for d in pool if d.name in targets or any(same_device(d.name, name) for name in targets)
+            ]
             return matches[:limit]
     index = default_device_index("input" if prefer_input else "output")
     if index is not None:

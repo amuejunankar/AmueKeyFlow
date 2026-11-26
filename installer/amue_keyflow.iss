@@ -7,7 +7,7 @@
 ; are removed before installing so only one installation ever exists.
 
 #define AppName "Amue KeyFlow"
-#define AppVersion "1.6.1"
+#define AppVersion "1.6.2"
 #define AppPublisher "Amue"
 #define AppExeName "AmueKeyFlow.exe"
 #define AppId "{{8B1B0F2F-5E8E-47F0-9C2A-1E0B8A6C4D11}"

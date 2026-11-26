@@ -18,7 +18,7 @@
 Setup closes a running tray instance before copying files, so upgrading in place works
 even while Amue KeyFlow is running.
 
-The installer is written to `installer\output\AmueKeyFlow-1.6.1-Setup.exe`. The script
+The installer is written to `installer\output\AmueKeyFlow-1.6.2-Setup.exe`. The script
 uses directives supported by Inno Setup 6.0.5 and newer (`ArchitecturesAllowed=x64`).
 
 It installs under `%LOCALAPPDATA%\Programs\Amue KeyFlow` (or Program Files when

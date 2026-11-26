@@ -8,7 +8,7 @@ from pathlib import Path
 
 APP_NAME = "Amue KeyFlow"
 APP_SLUG = "AmueKeyFlow"
-APP_VERSION = "1.6.1"
+APP_VERSION = "1.6.2"
 APP_PUBLISHER = "Amue"
 APP_DESCRIPTION = "Windows keyboard mapper and shortcut automation"
 
